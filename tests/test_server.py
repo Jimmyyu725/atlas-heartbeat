@@ -46,6 +46,7 @@ class BrowserContractTests(unittest.TestCase):
         self.assertIn('id="pulse-button"', html)
         self.assertIn('id="quiet-toggle"', html)
         self.assertIn('aria-live="polite"', html)
+        self.assertIn('rel="icon"', html)
         self.assertIn('href="/style.css"', html)
         self.assertIn('src="/app.js"', html)
 
