@@ -159,7 +159,10 @@ try {
     hostname: document.querySelector('#hostname')?.textContent,
     cpu: document.querySelector('#cpu-value')?.textContent,
     metricCards: document.querySelectorAll('[data-metric]').length,
-    metricValues: [...document.querySelectorAll('[data-metric] > strong')].map((item) => item.textContent.trim()),
+    metricValues: Object.fromEntries([...document.querySelectorAll('[data-metric]')].map((card) => [
+      card.dataset.metric,
+      card.querySelector(':scope > strong')?.textContent.trim() || ''
+    ])),
     sequence: document.querySelector('#sequence')?.textContent,
     connected: document.querySelector('#connection-status')?.dataset.connected,
     horizontalOverflow: document.documentElement.scrollWidth > window.innerWidth,
@@ -172,8 +175,13 @@ try {
   assert.notEqual(desktop.hostname, "Atlas");
   assert.match(desktop.cpu, /^\d+\.\d%$/);
   assert.equal(desktop.metricCards, 6);
-  assert.equal(desktop.metricValues.length, 6);
-  assert.ok(desktop.metricValues.every((value) => value && value !== "—"));
+  assert.deepEqual(Object.keys(desktop.metricValues).sort(), ["backup", "cpu", "disk", "load", "memory", "uptime"]);
+  assert.match(desktop.metricValues.cpu, /^\d{1,3}\.\d%$/);
+  assert.match(desktop.metricValues.memory, /^\d{1,3}\.\d%$/);
+  assert.match(desktop.metricValues.disk, /^\d{1,3}\.\d%$/);
+  assert.match(desktop.metricValues.load, /^\d+\.\d{2} · \d+\.\d{2} · \d+\.\d{2}$/);
+  assert.notEqual(desktop.metricValues.uptime, "—");
+  assert.ok(!["", "—", "未知"].includes(desktop.metricValues.backup));
   assert.ok(Number(desktop.sequence) > firstSequence);
   assert.equal(desktop.connected, "true");
   assert.equal(desktop.horizontalOverflow, false);

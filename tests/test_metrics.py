@@ -123,6 +123,17 @@ class MetricSamplerTests(unittest.TestCase):
         self.assertEqual(snapshot["status"], "degraded")
         self.assertIn("cpu_count: unavailable", snapshot["issues"])
 
+    def test_snapshot_isolates_clock_failure(self):
+        sampler = self.make_sampler()
+        sampler._clock = lambda: (_ for _ in ()).throw(OSError("clock unavailable"))
+
+        snapshot = sampler.snapshot()
+
+        self.assertIsNone(snapshot["sampled_at"])
+        self.assertEqual(snapshot["cpu_percent"], 20.0)
+        self.assertEqual(snapshot["status"], "degraded")
+        self.assertIn("clock: unavailable", snapshot["issues"])
+
     def test_concurrent_snapshots_serialize_cpu_sample_updates(self):
         state_lock = threading.Lock()
         active_readers = 0

@@ -123,7 +123,7 @@ class MetricSampler:
     def snapshot(self) -> dict[str, object]:
         issues: list[str] = []
         result: dict[str, object] = {
-            "sampled_at": self._clock(),
+            "sampled_at": self._safe("clock", self._clock, issues),
             "hostname": self._safe("hostname", self._hostname, issues),
         }
 

@@ -114,7 +114,7 @@ class HeartbeatServerTests(unittest.TestCase):
 
         self.assertEqual(caught.exception.code, 405)
 
-    def test_api_stays_available_when_cpu_count_sensor_fails(self):
+    def test_api_stays_available_when_individual_sensors_fail(self):
         readings = {
             "/proc/stat": "cpu 10 0 10 80 0 0 0 0 0 0\n",
             "/proc/meminfo": "MemTotal: 1000 kB\nMemAvailable: 500 kB\n",
@@ -127,7 +127,7 @@ class HeartbeatServerTests(unittest.TestCase):
             hostname=lambda: "atlas-test",
             cpu_count=lambda: (_ for _ in ()).throw(OSError("sensor unavailable")),
             backup_status=lambda: {"state": "active"},
-            clock=lambda: "2026-08-31T12:00:00Z",
+            clock=lambda: (_ for _ in ()).throw(OSError("clock unavailable")),
         )
         degraded_server = build_server(
             host="127.0.0.1", port=0, web_root=self.web_root, sampler=sampler
@@ -144,7 +144,9 @@ class HeartbeatServerTests(unittest.TestCase):
             degraded_thread.join(timeout=2)
 
         self.assertEqual(payload["status"], "degraded")
+        self.assertIsNone(payload["sampled_at"])
         self.assertIsNone(payload["load_per_cpu"])
+        self.assertIn("clock: unavailable", payload["issues"])
         self.assertIn("cpu_count: unavailable", payload["issues"])
 
 
