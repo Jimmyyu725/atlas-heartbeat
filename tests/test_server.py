@@ -2,10 +2,12 @@ import json
 from pathlib import Path
 import tempfile
 import threading
+from types import SimpleNamespace
 import unittest
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
+from atlas_heartbeat.metrics import MetricSampler
 from atlas_heartbeat.server import build_server, safe_static_path
 
 
@@ -111,6 +113,39 @@ class HeartbeatServerTests(unittest.TestCase):
             urlopen(request, timeout=2)
 
         self.assertEqual(caught.exception.code, 405)
+
+    def test_api_stays_available_when_cpu_count_sensor_fails(self):
+        readings = {
+            "/proc/stat": "cpu 10 0 10 80 0 0 0 0 0 0\n",
+            "/proc/meminfo": "MemTotal: 1000 kB\nMemAvailable: 500 kB\n",
+            "/proc/uptime": "100 0\n",
+        }
+        sampler = MetricSampler(
+            read_text=readings.__getitem__,
+            disk_usage=lambda _: SimpleNamespace(total=100, used=10, free=90),
+            loadavg=lambda: (0.25, 0.2, 0.1),
+            hostname=lambda: "atlas-test",
+            cpu_count=lambda: (_ for _ in ()).throw(OSError("sensor unavailable")),
+            backup_status=lambda: {"state": "active"},
+            clock=lambda: "2026-08-31T12:00:00Z",
+        )
+        degraded_server = build_server(
+            host="127.0.0.1", port=0, web_root=self.web_root, sampler=sampler
+        )
+        degraded_thread = threading.Thread(target=degraded_server.serve_forever, daemon=True)
+        degraded_thread.start()
+        host, port = degraded_server.server_address
+        try:
+            with urlopen(f"http://{host}:{port}/api/pulse", timeout=2) as response:
+                payload = json.load(response)
+        finally:
+            degraded_server.shutdown()
+            degraded_server.server_close()
+            degraded_thread.join(timeout=2)
+
+        self.assertEqual(payload["status"], "degraded")
+        self.assertIsNone(payload["load_per_cpu"])
+        self.assertIn("cpu_count: unavailable", payload["issues"])
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@ import {
   formatPercent,
   formatUptime,
   normalizePulse,
+  reconcileStarCount,
   visualTuning,
 } from "../web/state.mjs";
 
@@ -73,9 +74,20 @@ test("visualTuning accelerates rotation and dust as activity rises", () => {
   const busy = visualTuning({ cpuPercent: 100, memoryPercent: 90, diskPercent: 80, loadPerCpu: 1 });
 
   assert.ok(busy.orbitSeconds < calm.orbitSeconds);
+  assert.ok(busy.surfaceSeconds < calm.surfaceSeconds);
   assert.ok(busy.glow > calm.glow);
   assert.ok(busy.dustCount > calm.dustCount);
   assert.equal(busy.diskArc, 288);
+});
+
+test("reconcileStarCount grows and shrinks dust without stale particles", () => {
+  const initial = [{ id: 0 }, { id: 1 }];
+  const grown = reconcileStarCount(initial, 4, (index) => ({ id: index }));
+  const shrunk = reconcileStarCount(grown, 1, (index) => ({ id: index }));
+
+  assert.deepEqual(grown.map((star) => star.id), [0, 1, 2, 3]);
+  assert.deepEqual(shrunk.map((star) => star.id), [0]);
+  assert.notEqual(grown, initial);
 });
 
 test("formatters keep missing and large values readable", () => {

@@ -48,12 +48,21 @@ export function visualTuning(pulse) {
   const load = Math.min(1, Math.max(0, finiteOrNull(pulse.loadPerCpu) ?? 0));
   return {
     orbitSeconds: Number((32 - cpu * 0.24).toFixed(1)),
+    surfaceSeconds: Number((48 - cpu * 0.36).toFixed(1)),
     breathSeconds: Number((6.2 - cpu * 0.032).toFixed(1)),
     glow: Number((0.45 + memory * 0.006).toFixed(2)),
     dustCount: 36 + Math.round(load * 72),
     diskArc: Math.round(disk * 3.6),
     hue: Math.round(188 + memory * 0.42),
   };
+}
+
+export function reconcileStarCount(stars, targetCount, factory) {
+  const desired = Math.min(300, Math.max(0, Math.round(Number(targetCount) || 0)));
+  if (stars.length >= desired) return stars.slice(0, desired);
+  const next = stars.slice();
+  while (next.length < desired) next.push(factory(next.length));
+  return next;
 }
 
 export function formatPercent(value) {

@@ -4,6 +4,7 @@ import {
   formatPercent,
   formatUptime,
   normalizePulse,
+  reconcileStarCount,
   visualTuning,
 } from "./state.mjs";
 
@@ -20,6 +21,8 @@ let sequence = 0;
 let latestTuning = visualTuning({});
 let refreshTimer;
 let pulseTimer;
+let starfield;
+let userQuiet = false;
 
 const text = (selector, value) => {
   const element = document.querySelector(selector);
@@ -73,6 +76,8 @@ function applySnapshot(raw) {
   root.style.setProperty("--planet-glow", latestTuning.glow);
   root.style.setProperty("--orbit-speed", `${latestTuning.orbitSeconds}s`);
   root.style.setProperty("--breath-speed", `${latestTuning.breathSeconds}s`);
+  root.style.setProperty("--surface-speed", `${latestTuning.surfaceSeconds}s`);
+  starfield?.setDensity(latestTuning.dustCount);
 
   text("#hostname", pulse.hostname);
   text("#cpu-value", formatPercent(pulse.cpuPercent));
@@ -127,9 +132,7 @@ function emitPulse() {
   pulseTimer = window.setTimeout(() => planetSystem.classList.remove("is-pulsing"), 1300);
 }
 
-function setQuietMode(enabled) {
-  body.classList.toggle("is-quiet", enabled);
-  quietToggle.checked = enabled;
+function persistQuietMode(enabled) {
   try {
     localStorage.setItem("atlas-heartbeat-quiet", enabled ? "1" : "0");
   } catch (_error) {
@@ -139,10 +142,23 @@ function setQuietMode(enabled) {
 
 function initialQuietMode() {
   try {
-    return localStorage.getItem("atlas-heartbeat-quiet") === "1" || reduceMotion.matches;
+    return localStorage.getItem("atlas-heartbeat-quiet") === "1";
   } catch (_error) {
-    return reduceMotion.matches;
+    return false;
   }
+}
+
+function syncMotionMode() {
+  const paused = userQuiet || reduceMotion.matches;
+  body.classList.toggle("is-quiet", paused);
+  quietToggle.checked = userQuiet;
+  starfield?.setPaused(paused);
+}
+
+function setQuietMode(enabled) {
+  userQuiet = enabled;
+  persistQuietMode(enabled);
+  syncMotionMode();
 }
 
 function createStarfield(canvas) {
@@ -153,16 +169,21 @@ function createStarfield(canvas) {
   let stars = [];
   let frame = 0;
   let pointer = { x: 0, y: 0 };
+  let baseDensity = latestTuning.dustCount;
+  let paused = false;
 
-  const seed = () => {
-    const count = Math.max(42, Math.min(150, latestTuning.dustCount + Math.round(width / 24)));
-    stars = Array.from({ length: count }, (_, index) => ({
+  const makeStar = (index) => ({
       x: ((index * 97.31) % width) || width / 2,
       y: ((index * index * 13.17) % height) || height / 2,
       radius: 0.35 + ((index * 17) % 10) / 10,
       depth: 0.18 + ((index * 29) % 80) / 100,
       phase: (index * 1.618) % (Math.PI * 2),
-    }));
+  });
+
+  const reconcile = () => {
+    const count = Math.max(42, Math.min(150, baseDensity + Math.round(width / 24)));
+    stars = reconcileStarCount(stars, count, makeStar);
+    canvas.dataset.dustCount = String(stars.length);
   };
 
   const resize = () => {
@@ -174,13 +195,13 @@ function createStarfield(canvas) {
     canvas.style.width = `${width}px`;
     canvas.style.height = `${height}px`;
     context.setTransform(ratio, 0, 0, ratio, 0, 0);
-    seed();
+    stars = [];
+    reconcile();
   };
 
-  const draw = (time) => {
+  const drawFrame = (time) => {
     context.clearRect(0, 0, width, height);
-    const quiet = body.classList.contains("is-quiet") || reduceMotion.matches;
-    const drift = quiet ? 0 : time * 0.000025 * (1 + (100 - latestTuning.orbitSeconds) / 100);
+    const drift = time * 0.000025 * (1 + (100 - latestTuning.orbitSeconds) / 100);
     for (const star of stars) {
       const parallaxX = pointer.x * star.depth * 8;
       const parallaxY = pointer.y * star.depth * 8;
@@ -192,21 +213,47 @@ function createStarfield(canvas) {
       context.arc(x, y, star.radius, 0, Math.PI * 2);
       context.fill();
     }
-    frame = window.requestAnimationFrame(draw);
+  };
+
+  const animate = (time) => {
+    drawFrame(time);
+    if (!paused) frame = window.requestAnimationFrame(animate);
+  };
+
+  const setPaused = (value) => {
+    paused = Boolean(value);
+    canvas.dataset.paused = String(paused);
+    window.cancelAnimationFrame(frame);
+    frame = 0;
+    if (paused) {
+      pointer = { x: 0, y: 0 };
+      drawFrame(0);
+    } else {
+      frame = window.requestAnimationFrame(animate);
+    }
+  };
+
+  const setDensity = (value) => {
+    baseDensity = value;
+    reconcile();
+    if (paused) drawFrame(0);
   };
 
   window.addEventListener("resize", resize, { passive: true });
   window.addEventListener("pointermove", (event) => {
+    if (paused) return;
     pointer = { x: event.clientX / Math.max(1, width) - 0.5, y: event.clientY / Math.max(1, height) - 0.5 };
   }, { passive: true });
   resize();
-  frame = window.requestAnimationFrame(draw);
-  return () => window.cancelAnimationFrame(frame);
+  frame = window.requestAnimationFrame(animate);
+  return { setDensity, setPaused };
 }
 
 document.querySelector("#planet").addEventListener("click", emitPulse);
 document.querySelector("#pulse-button").addEventListener("click", emitPulse);
 quietToggle.addEventListener("change", () => setQuietMode(quietToggle.checked));
-setQuietMode(initialQuietMode());
-createStarfield(document.querySelector("#starfield"));
+userQuiet = initialQuietMode();
+starfield = createStarfield(document.querySelector("#starfield"));
+reduceMotion.addEventListener("change", syncMotionMode);
+syncMotionMode();
 refresh();

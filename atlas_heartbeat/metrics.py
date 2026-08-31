@@ -8,6 +8,7 @@ from pathlib import Path
 import shutil
 import socket
 import subprocess
+import threading
 from typing import Callable, NamedTuple
 
 
@@ -65,9 +66,11 @@ def _clock() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
-def read_backup_status() -> dict[str, str | None]:
+def read_backup_status(
+    run: Callable[..., object] = subprocess.run,
+) -> dict[str, str | None]:
     """Read the configured restic timer state without changing systemd state."""
-    result = subprocess.run(
+    result = run(
         [
             "systemctl",
             "show",
@@ -82,7 +85,7 @@ def read_backup_status() -> dict[str, str | None]:
         timeout=1.5,
     )
     if result.returncode != 0:
-        return {"state": "unknown", "next_run": None, "last_run": None}
+        raise OSError("systemd timer status is unavailable")
     properties = dict(
         line.split("=", 1) for line in result.stdout.splitlines() if "=" in line
     )
@@ -115,6 +118,7 @@ class MetricSampler:
         self._backup_status = backup_status
         self._clock = clock
         self._previous_cpu: CpuTimes | None = None
+        self._cpu_lock = threading.Lock()
 
     def snapshot(self) -> dict[str, object]:
         issues: list[str] = []
@@ -123,17 +127,18 @@ class MetricSampler:
             "hostname": self._safe("hostname", self._hostname, issues),
         }
 
-        current_cpu = self._safe(
-            "cpu", lambda: parse_cpu_line(self._read_text("/proc/stat").splitlines()[0]), issues
-        )
-        if isinstance(current_cpu, CpuTimes):
-            baseline = self._previous_cpu or CpuTimes(current_cpu.total, current_cpu.idle)
-            if self._previous_cpu is None:
-                baseline = CpuTimes(0, 0)
-            result["cpu_percent"] = cpu_percent(baseline, current_cpu)
-            self._previous_cpu = current_cpu
-        else:
-            result["cpu_percent"] = None
+        with self._cpu_lock:
+            current_cpu = self._safe(
+                "cpu",
+                lambda: parse_cpu_line(self._read_text("/proc/stat").splitlines()[0]),
+                issues,
+            )
+            if isinstance(current_cpu, CpuTimes):
+                baseline = self._previous_cpu or CpuTimes(0, 0)
+                result["cpu_percent"] = cpu_percent(baseline, current_cpu)
+                self._previous_cpu = current_cpu
+            else:
+                result["cpu_percent"] = None
 
         memory = self._safe(
             "memory", lambda: parse_meminfo(self._read_text("/proc/meminfo")), issues
@@ -152,8 +157,11 @@ class MetricSampler:
         load = self._safe("load", self._loadavg, issues)
         if isinstance(load, tuple) and len(load) == 3:
             result["load"] = [round(value, 2) for value in load]
-            cores = self._cpu_count() or 1
-            result["load_per_cpu"] = round(load[0] / max(1, cores), 4)
+            cores = self._safe("cpu_count", self._cpu_count, issues)
+            if isinstance(cores, int) and cores > 0:
+                result["load_per_cpu"] = round(load[0] / cores, 4)
+            else:
+                result["load_per_cpu"] = None
         else:
             result["load"] = None
             result["load_per_cpu"] = None

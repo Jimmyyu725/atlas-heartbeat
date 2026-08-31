@@ -1,4 +1,7 @@
 from collections import namedtuple
+from concurrent.futures import ThreadPoolExecutor
+import threading
+import time
 import unittest
 
 from atlas_heartbeat.metrics import (
@@ -6,6 +9,7 @@ from atlas_heartbeat.metrics import (
     cpu_percent,
     parse_cpu_line,
     parse_meminfo,
+    read_backup_status,
 )
 
 
@@ -107,6 +111,64 @@ class MetricSamplerTests(unittest.TestCase):
         self.assertIsNone(snapshot["uptime_seconds"])
         self.assertIsNone(snapshot["backup"])
         self.assertGreaterEqual(len(snapshot["issues"]), 5)
+
+    def test_snapshot_isolates_cpu_count_failure(self):
+        sampler = self.make_sampler()
+        sampler._cpu_count = lambda: (_ for _ in ()).throw(OSError("cpu count unavailable"))
+
+        snapshot = sampler.snapshot()
+
+        self.assertEqual(snapshot["load"], [0.25, 0.5, 0.75])
+        self.assertIsNone(snapshot["load_per_cpu"])
+        self.assertEqual(snapshot["status"], "degraded")
+        self.assertIn("cpu_count: unavailable", snapshot["issues"])
+
+    def test_concurrent_snapshots_serialize_cpu_sample_updates(self):
+        state_lock = threading.Lock()
+        active_readers = 0
+        maximum_readers = 0
+        cpu_sample = 0
+
+        def read_text(path):
+            nonlocal active_readers, maximum_readers, cpu_sample
+            if path == "/proc/stat":
+                with state_lock:
+                    active_readers += 1
+                    maximum_readers = max(maximum_readers, active_readers)
+                    cpu_sample += 1
+                    sample = cpu_sample
+                time.sleep(0.03)
+                with state_lock:
+                    active_readers -= 1
+                return f"cpu {10 + sample * 10} 0 10 {80 + sample * 2} 0 0 0 0 0 0\n"
+            if path == "/proc/meminfo":
+                return "MemTotal: 1000 kB\nMemAvailable: 500 kB\n"
+            if path == "/proc/uptime":
+                return "100 0\n"
+            raise FileNotFoundError(path)
+
+        sampler = MetricSampler(
+            read_text=read_text,
+            disk_usage=lambda _: DiskUsage(total=100, used=10, free=90),
+            loadavg=lambda: (0.1, 0.1, 0.1),
+            hostname=lambda: "atlas-test",
+            cpu_count=lambda: 4,
+            backup_status=lambda: {"state": "active"},
+            clock=lambda: "2026-08-31T12:00:00Z",
+        )
+        sampler.snapshot()
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            snapshots = list(executor.map(lambda _: sampler.snapshot(), range(2)))
+
+        self.assertEqual(len(snapshots), 2)
+        self.assertEqual(maximum_readers, 1)
+
+    def test_backup_reader_treats_systemctl_failure_as_sensor_failure(self):
+        result = namedtuple("Result", "returncode stdout")(1, "")
+
+        with self.assertRaises(OSError):
+            read_backup_status(run=lambda *_args, **_kwargs: result)
 
 
 if __name__ == "__main__":
