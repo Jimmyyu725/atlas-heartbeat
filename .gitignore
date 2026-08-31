@@ -6,5 +6,6 @@ htmlcov/
 .venv/
 node_modules/
 dist/
+.worktrees/
 *.log
 .DS_Store
