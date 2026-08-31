@@ -9,6 +9,10 @@ from urllib.request import Request, urlopen
 from atlas_heartbeat.server import build_server, safe_static_path
 
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+WEB_ROOT = PROJECT_ROOT / "web"
+
+
 class FakeSampler:
     def snapshot(self):
         return {
@@ -32,6 +36,24 @@ class StaticPathTests(unittest.TestCase):
 
             self.assertIsNone(safe_static_path(root, "/../secret"))
             self.assertIsNone(safe_static_path(root, "/%2e%2e/secret"))
+
+
+class BrowserContractTests(unittest.TestCase):
+    def test_index_contains_accessible_landmarks_and_controls(self):
+        html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+
+        self.assertIn('id="planet"', html)
+        self.assertIn('id="pulse-button"', html)
+        self.assertIn('id="quiet-toggle"', html)
+        self.assertIn('aria-live="polite"', html)
+        self.assertIn('href="/style.css"', html)
+        self.assertIn('src="/app.js"', html)
+
+    def test_styles_include_mobile_and_reduced_motion_modes(self):
+        css = (WEB_ROOT / "style.css").read_text(encoding="utf-8")
+
+        self.assertIn("@media (max-width: 760px)", css)
+        self.assertIn("prefers-reduced-motion: reduce", css)
 
 
 class HeartbeatServerTests(unittest.TestCase):

@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#070b18">
+    <meta name="description" content="把 Atlas 服务器实时状态变成一颗会呼吸的互动星球。">
+    <title>Atlas Heartbeat · 实时系统星球</title>
+    <link rel="stylesheet" href="/style.css">
+  </head>
+  <body>
+    <canvas id="starfield" aria-hidden="true"></canvas>
+    <div class="ambient-grid" aria-hidden="true"></div>
+
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="Atlas Heartbeat 首页">
+          <span class="brand-mark" aria-hidden="true"><i></i></span>
+          <span>
+            <strong>ATLAS</strong>
+            <small>HEARTBEAT</small>
+          </span>
+        </a>
+        <div class="signal-pill" id="connection-status" role="status">
+          <span class="signal-dot" aria-hidden="true"></span>
+          <span id="connection-label">正在捕获信号</span>
+        </div>
+      </header>
+
+      <main class="dashboard">
+        <section class="orbit-stage" aria-labelledby="planet-title">
+          <div class="stage-index" aria-hidden="true">
+            <span>40.7128° N</span>
+            <span>74.0060° W</span>
+          </div>
+
+          <div class="planet-system" id="planet-system">
+            <div class="orbit orbit-outer" aria-hidden="true"><i></i><b></b></div>
+            <div class="orbit orbit-inner" aria-hidden="true"><i></i></div>
+            <div class="disk-meter" aria-hidden="true"></div>
+            <button id="planet" class="planet" type="button" aria-label="向 Atlas 星球发送视觉脉冲">
+              <span class="planet-atmosphere" aria-hidden="true"></span>
+              <span class="planet-surface" aria-hidden="true">
+                <i class="latitude latitude-one"></i>
+                <i class="latitude latitude-two"></i>
+                <i class="longitude"></i>
+                <b class="storm"></b>
+              </span>
+              <span class="planet-core" aria-hidden="true"></span>
+              <span class="sr-only">点击发出脉冲</span>
+            </button>
+            <span class="pulse-wave pulse-wave-one" aria-hidden="true"></span>
+            <span class="pulse-wave pulse-wave-two" aria-hidden="true"></span>
+          </div>
+
+          <div class="planet-caption">
+            <p class="eyebrow"><span></span> LIVE SYSTEM PORTRAIT</p>
+            <h1 id="planet-title"><span id="hostname">Atlas</span><em>正在呼吸</em></h1>
+            <p class="mission-log" id="mission-log" aria-live="polite">正在建立第一条轨道遥测……</p>
+            <button class="pulse-button" id="pulse-button" type="button">
+              <span aria-hidden="true">◉</span>
+              发送一次脉冲
+            </button>
+          </div>
+        </section>
+
+        <aside class="telemetry" aria-labelledby="telemetry-title">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">LIVE TELEMETRY</p>
+              <h2 id="telemetry-title">轨道遥测</h2>
+            </div>
+            <span class="sample-sequence">SEQ <b id="sequence">000</b></span>
+          </div>
+
+          <div class="metric-grid">
+            <article class="metric-card metric-card-primary" data-metric="cpu">
+              <div class="metric-meta"><span>CPU</span><small>自转速率</small></div>
+              <strong id="cpu-value">—</strong>
+              <div class="meter"><i id="cpu-meter"></i></div>
+            </article>
+            <article class="metric-card" data-metric="memory">
+              <div class="metric-meta"><span>MEM</span><small id="memory-total">核心光</small></div>
+              <strong id="memory-value">—</strong>
+              <div class="meter"><i id="memory-meter"></i></div>
+            </article>
+            <article class="metric-card" data-metric="disk">
+              <div class="metric-meta"><span>DISK</span><small id="disk-total">外环占用</small></div>
+              <strong id="disk-value">—</strong>
+              <div class="meter"><i id="disk-meter"></i></div>
+            </article>
+            <article class="metric-card" data-metric="load">
+              <div class="metric-meta"><span>LOAD</span><small>1 / 5 / 15 分钟</small></div>
+              <strong id="load-value">—</strong>
+              <p class="metric-foot" id="load-detail">每核心 —</p>
+            </article>
+            <article class="metric-card" data-metric="uptime">
+              <div class="metric-meta"><span>UP</span><small>连续航行</small></div>
+              <strong id="uptime-value">—</strong>
+              <p class="metric-foot">没有重启的旅程</p>
+            </article>
+            <article class="metric-card" data-metric="backup">
+              <div class="metric-meta"><span>BACKUP</span><small>记忆舱</small></div>
+              <strong id="backup-value">—</strong>
+              <p class="metric-foot" id="backup-detail">等待信号</p>
+            </article>
+          </div>
+
+          <div class="control-deck">
+            <div class="last-contact">
+              <span>最后接触</span>
+              <strong id="sampled-at">—</strong>
+            </div>
+            <label class="quiet-control" for="quiet-toggle">
+              <span>
+                <strong>静谧模式</strong>
+                <small>减弱星尘与轨道动画</small>
+              </span>
+              <input id="quiet-toggle" type="checkbox" role="switch">
+              <i aria-hidden="true"></i>
+            </label>
+          </div>
+        </aside>
+      </main>
+
+      <footer>
+        <span>ATLAS-EWR · READ ONLY</span>
+        <span>数据每 2 秒刷新</span>
+      </footer>
+    </div>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
